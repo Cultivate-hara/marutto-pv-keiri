@@ -1,569 +1,1487 @@
-import React, { useState, useEffect } from 'react';
-import { FileText, Mail, Save, List, Plus, Edit, Trash2, Send, Brain, Sun, Zap, Package, Info, Users, Download, Database, Eye, FileTemplate } from 'lucide-react';
-
-const MaruttoPVKeiri = () => {
-  const [documents, setDocuments] = useState([]);
-  const [customers, setCustomers] = useState([]);
-  const [showCustomerDB, setShowCustomerDB] = useState(false);
-  const [showPreview, setShowPreview] = useState(false);
-  const [currentDoc, setCurrentDoc] = useState({
-    id: null,
-    type: 'proposal',
-    title: '',
-    client: '',
-    clientId: null,
-    projectInfo: {
-      location: '',
-      installationType: 'SG',
-      installContent: '資材工事',
-      panelCount: 0,
-      panelWattPerUnit: 400,
-      inverterCount: 0,
-      inverterCapacityPerUnit: 50,
-      dcCapacity: 0,
-      acCapacity: 0
-    },
-    items: [
-      { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-      { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-      { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-      { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-      { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-      { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
-    ],
-    notes: '',
-    createdAt: new Date().toISOString().split('T')[0],
-    status: 'draft'
-  });
-  const [showList, setShowList] = useState(false);
-  const [showPriceTable, setShowPriceTable] = useState(false);
-  const [emailModal, setEmailModal] = useState({ show: false, type: '' });
-  const [customerModal, setCustomerModal] = useState({ show: false, customer: null });
-
-  // 備考テンプレート
-  const noteTemplates = [
-    { 
-      name: '標準テンプレート', 
-      content: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時30%、中間時40%、完成時30%\n【その他】系統連系申請費用を含む' 
-    },
-    { 
-      name: '短納期テンプレート', 
-      content: '【工期】約2ヶ月（短納期対応）\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時50%、完成時50%\n【注意事項】短納期のため、天候により工期が延長する場合があります' 
-    },
-    { 
-      name: '営農型テンプレート', 
-      content: '【工期】約4ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【農地一時転用】申請支援を含む\n【遮光率】30%以下で設計\n【支柱高さ】最低地上高3m確保' 
-    },
-    {
-      name: '屋根設置テンプレート',
-      content: '【工期】約1.5ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証、防水工事：10年保証\n【屋根診断】設置前に無料診断実施\n【注意事項】屋根の状態により補強工事が必要な場合があります'
-    }
-  ];
-
-  // 設置タイプの説明
-  const installationTypes = {
-    SG: { name: '野立て', description: '地面に直接設置する標準的な太陽光発電システム' },
-    SR: { name: '屋根設置', description: '建物の屋根に設置する省スペース型システム' },
-    SC: { name: 'カーポート型', description: '駐車場の屋根として機能する太陽光発電システム' },
-    SS: { name: '営農型', description: '農業と太陽光発電を両立させるソーラーシェアリング' },
-    SV: { name: '垂直型', description: '垂直に設置し両面発電が可能な次世代型システム' },
-    SH: { name: 'ハウス型', description: '農業用ハウスに設置する特殊型システム' },
-    ST: { name: '追尾型', description: '太陽の動きを追尾して発電効率を最大化するシステム' }
-  };
-
-  // 設置内容の選択肢
-  const installContentOptions = ['一式', '資材', '工事', '資材工事', '申請', 'その他'];
-
-  // 資材価格表
-  const priceTable = {
-    panels: [
-      { name: '400W単結晶パネル（標準）', price: 24000, description: '標準的な高効率パネル' },
-      { name: '450W単結晶パネル（高効率）', price: 28000, description: '最新の高効率パネル' },
-      { name: '両面発電パネル（営農型用）', price: 32000, description: '営農型に最適な両面発電' }
-    ],
-    inverters: [
-      { name: '50kWパワコン（標準）', price: 780000, description: '標準的な50kWパワコン' },
-      { name: '100kWパワコン（大型）', price: 1400000, description: '大規模発電所向け' },
-      { name: '25kWパワコン（小型）', price: 450000, description: '小規模設備向け' }
-    ],
-    mountings: [
-      { name: '野立て架台（標準）', price: 12000, description: '標準的な野立て用架台/枚' },
-      { name: '屋根用架台', price: 8500, description: '屋根設置用軽量架台/枚' },
-      { name: 'カーポート架台', price: 25000, description: 'カーポート型架台/枚' },
-      { name: '営農型架台（高架）', price: 35000, description: '営農型用高架架台/枚' },
-      { name: '追尾架台', price: 45000, description: '1軸追尾システム付き架台/枚' }
-    ]
-  };
-
-  // サンプルデータ
-  useEffect(() => {
-    // 顧客データ
-    const sampleCustomers = [
-      {
-        id: 1,
-        name: '株式会社サンプル工業',
-        email: 'info@sample-kogyo.co.jp',
-        phone: '048-123-4567',
-        address: '埼玉県さいたま市...',
-        contactPerson: '山田太郎'
-      },
-      {
-        id: 2,
-        name: '△△物流株式会社',
-        email: 'contact@delta-logistics.jp',
-        phone: '043-234-5678',
-        address: '千葉県千葉市...',
-        contactPerson: '鈴木花子'
-      }
-    ];
-    setCustomers(sampleCustomers);
-
-    // 書類データ
-    const savedDocs = [
-      {
-        id: 1,
-        type: 'proposal',
-        title: '○○工場 太陽光発電設備設置工事',
-        client: '株式会社サンプル工業',
-        clientId: 1,
-        projectInfo: {
-          location: '埼玉県',
-          installationType: 'SR',
-          installContent: '資材工事',
-          panelCount: 1250,
-          panelWattPerUnit: 400,
-          inverterCount: 10,
-          inverterCapacityPerUnit: 50,
-          dcCapacity: 500,
-          acCapacity: 500
-        },
-        items: [
-          { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 2500000, estimatePrice: 3000000 },
-          { category: '太陽光パネル', description: '400W単結晶パネル', quantity: 1250, unitPrice: 24000, estimatePrice: 26000 },
-          { category: 'パワコン', description: '50kWパワーコンディショナー', quantity: 10, unitPrice: 780000, estimatePrice: 850000 },
-          { category: '架台', description: '屋根置き架台', quantity: 1250, unitPrice: 8500, estimatePrice: 9500 },
-          { category: '電気工事', description: '配線・系統連系工事', quantity: 1, unitPrice: 8000000, estimatePrice: 9600000 },
-          { category: '基礎工事', description: '屋根補強工事', quantity: 1, unitPrice: 3000000, estimatePrice: 3600000 }
-        ],
-        notes: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証',
-        createdAt: '2025-01-10',
-        status: 'completed'
-      }
-    ];
-    setDocuments(savedDocs);
-  }, []);
-
-  // DC/AC容量の自動計算
-  useEffect(() => {
-    const dcCapacity = (currentDoc.projectInfo.panelCount * currentDoc.projectInfo.panelWattPerUnit) / 1000;
-    const acCapacity = currentDoc.projectInfo.inverterCount * currentDoc.projectInfo.inverterCapacityPerUnit;
-    
-    setCurrentDoc(prev => ({
-      ...prev,
-      projectInfo: {
-        ...prev.projectInfo,
-        dcCapacity: dcCapacity,
-        acCapacity: acCapacity
-      }
-    }));
-  }, [currentDoc.projectInfo.panelCount, currentDoc.projectInfo.panelWattPerUnit, 
-      currentDoc.projectInfo.inverterCount, currentDoc.projectInfo.inverterCapacityPerUnit]);
-
-  const calculateTotal = (useEstimatePrice = false) => {
-    return currentDoc.items.reduce((sum, item) => {
-      const price = useEstimatePrice ? item.estimatePrice : item.unitPrice;
-      return sum + (item.quantity * price);
-    }, 0);
-  };
-
-  const calculateMargin = () => {
-    const cost = calculateTotal(false);
-    const estimate = calculateTotal(true);
-    return estimate - cost;
-  };
-
-  const calculateMarginRate = () => {
-    const cost = calculateTotal(false);
-    const margin = calculateMargin();
-    return cost > 0 ? (margin / cost * 100).toFixed(1) : 0;
-  };
-
-  const addItem = () => {
-    setCurrentDoc({
-      ...currentDoc,
-      items: [...currentDoc.items, { category: 'その他', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }]
-    });
-  };
-
-  const updateItem = (index, field, value) => {
-    const newItems = [...currentDoc.items];
-    if (field === 'quantity' || field === 'unitPrice' || field === 'estimatePrice') {
-      newItems[index][field] = Number(value);
-    } else {
-      newItems[index][field] = value;
-    }
-    setCurrentDoc({ ...currentDoc, items: newItems });
-  };
-
-  const removeItem = (index) => {
-    if (currentDoc.items.length > 1) {
-      const newItems = currentDoc.items.filter((_, i) => i !== index);
-      setCurrentDoc({ ...currentDoc, items: newItems });
-    }
-  };
-
-  const updateProjectInfo = (field, value) => {
-    setCurrentDoc({
-      ...currentDoc,
-      projectInfo: { ...currentDoc.projectInfo, [field]: value }
-    });
-  };
-
-  const addFromPriceTable = (category, item) => {
-    const newItem = {
-      category: category === 'panels' ? '太陽光パネル' : category === 'inverters' ? 'パワコン' : '架台',
-      description: item.name,
-      quantity: 1,
-      unitPrice: item.price,
-      estimatePrice: Math.round(item.price * 1.15)
-    };
-    setCurrentDoc({
-      ...currentDoc,
-      items: [...currentDoc.items, newItem]
-    });
-    alert(`${item.name}を追加しました`);
-  };
-
-  // AI推測機能
-  const suggestEstimate = () => {
-    const dcCapacity = currentDoc.projectInfo.dcCapacity;
-    if (!dcCapacity || !currentDoc.projectInfo.location) {
-      alert('DC容量と設置場所を入力してください');
-      return;
-    }
-
-    const panelWatt = currentDoc.projectInfo.panelWattPerUnit || 400;
-    const inverterCapacity = currentDoc.projectInfo.inverterCapacityPerUnit || 50;
-    
-    const panelCount = Math.ceil((dcCapacity * 1000) / panelWatt);
-    const inverterCount = Math.ceil(dcCapacity / inverterCapacity);
-    
-    // 設置タイプに応じた価格調整
-    const typeMultiplier = {
-      SG: 1.0,
-      SR: 0.9,
-      SC: 1.3,
-      SS: 1.5,
-      SV: 1.4,
-      SH: 1.2,
-      ST: 1.8
-    };
-    
-    const multiplier = typeMultiplier[currentDoc.projectInfo.installationType] || 1.0;
-    
-    const suggestion = {
-      panelCount,
-      inverterCount,
-      items: [
-        { 
-          category: '設計費', 
-          description: '基本設計・詳細設計・申請業務', 
-          quantity: 1, 
-          unitPrice: Math.round(dcCapacity * 5000 * multiplier),
-          estimatePrice: Math.round(dcCapacity * 5000 * multiplier * 1.2)
-        },
-        { 
-          category: '太陽光パネル', 
-          description: `${panelWatt}W単結晶パネル`, 
-          quantity: panelCount, 
-          unitPrice: 24000,
-          estimatePrice: 26000
-        },
-        { 
-          category: 'パワコン', 
-          description: `${inverterCapacity}kWパワーコンディショナー`, 
-          quantity: inverterCount, 
-          unitPrice: 780000,
-          estimatePrice: 850000
-        },
-        { 
-          category: '架台', 
-          description: installationTypes[currentDoc.projectInfo.installationType].name + '架台', 
-          quantity: panelCount, 
-          unitPrice: Math.round(12000 * multiplier),
-          estimatePrice: Math.round(13000 * multiplier)
-        },
-        { 
-          category: '電気工事', 
-          description: dcCapacity > 500 ? '高圧受電設備・配線工事' : '配線・系統連系工事', 
-          quantity: 1, 
-          unitPrice: Math.round(dcCapacity * 15000 * multiplier),
-          estimatePrice: Math.round(dcCapacity * 18000 * multiplier)
-        },
-        { 
-          category: '基礎工事', 
-          description: currentDoc.projectInfo.installationType === 'SR' ? '屋根補強工事' : '造成・杭打ち工事', 
-          quantity: 1, 
-          unitPrice: Math.round(dcCapacity * 8000 * multiplier),
-          estimatePrice: Math.round(dcCapacity * 9600 * multiplier)
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>まるっとPV経理 - 太陽光発電EPC経理管理システム</title>
+    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        /* Lucide Icons */
+        .icon {
+            display: inline-block;
+            width: 1.25rem;
+            height: 1.25rem;
+            stroke: currentColor;
+            stroke-width: 2;
+            stroke-linecap: round;
+            stroke-linejoin: round;
+            fill: none;
         }
-      ]
-    };
+        .icon-large {
+            width: 2rem;
+            height: 2rem;
+        }
+        .icon-small {
+            width: 1rem;
+            height: 1rem;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
     
-    if (window.confirm('AI推測結果を反映しますか？\n\n' +
-      `推定パネル数: ${panelCount}枚\n` +
-      `推定パワコン数: ${inverterCount}台\n` +
-      `推定原価: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toLocaleString()}\n` +
-      `推定見積額: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.estimatePrice, 0).toLocaleString()}`)) {
-      setCurrentDoc({
-        ...currentDoc,
-        projectInfo: {
-          ...currentDoc.projectInfo,
-          panelCount,
-          inverterCount
-        },
-        items: suggestion.items
-      });
-    }
-  };
+    <script type="text/babel">
+        // アイコンコンポーネント
+        const Icons = {
+            Sun: () => (
+                <svg className="icon icon-large" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="5"></circle>
+                    <line x1="12" y1="1" x2="12" y2="3"></line>
+                    <line x1="12" y1="21" x2="12" y2="23"></line>
+                    <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                    <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                    <line x1="1" y1="12" x2="3" y2="12"></line>
+                    <line x1="21" y1="12" x2="23" y2="12"></line>
+                    <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                    <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+                </svg>
+            ),
+            Users: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                    <circle cx="9" cy="7" r="4"></circle>
+                    <path d="M23 21v-2a4 4 0 0 0-3-3.87"></path>
+                    <path d="M16 3.13a4 4 0 0 1 0 7.75"></path>
+                </svg>
+            ),
+            Package: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <line x1="16.5" y1="9.4" x2="7.5" y2="4.21"></line>
+                    <path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"></path>
+                    <polyline points="3.27 6.96 12 12.01 20.73 6.96"></polyline>
+                    <line x1="12" y1="22.08" x2="12" y2="12"></line>
+                </svg>
+            ),
+            List: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <line x1="8" y1="6" x2="21" y2="6"></line>
+                    <line x1="8" y1="12" x2="21" y2="12"></line>
+                    <line x1="8" y1="18" x2="21" y2="18"></line>
+                    <line x1="3" y1="6" x2="3.01" y2="6"></line>
+                    <line x1="3" y1="12" x2="3.01" y2="12"></line>
+                    <line x1="3" y1="18" x2="3.01" y2="18"></line>
+                </svg>
+            ),
+            Plus: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <line x1="12" y1="5" x2="12" y2="19"></line>
+                    <line x1="5" y1="12" x2="19" y2="12"></line>
+                </svg>
+            ),
+            Save: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                    <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                    <polyline points="7 3 7 8 15 8"></polyline>
+                </svg>
+            ),
+            Brain: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M9.5 2A2.5 2.5 0 0 1 12 4.5v15a2.5 2.5 0 0 1-4.96.44 2.5 2.5 0 0 1-2.96-3.08 3 3 0 0 1-.34-5.58 2.5 2.5 0 0 1 1.32-4.24 2.5 2.5 0 0 1 1.44-5A2.5 2.5 0 0 1 9.5 2Z"></path>
+                    <path d="M14.5 2A2.5 2.5 0 0 0 12 4.5v15a2.5 2.5 0 0 0 4.96.44 2.5 2.5 0 0 0 2.96-3.08 3 3 0 0 0 .34-5.58 2.5 2.5 0 0 0-1.32-4.24 2.5 2.5 0 0 0-1.44-5A2.5 2.5 0 0 0 14.5 2Z"></path>
+                </svg>
+            ),
+            Eye: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>
+                    <circle cx="12" cy="12" r="3"></circle>
+                </svg>
+            ),
+            Download: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                    <polyline points="7 10 12 15 17 10"></polyline>
+                    <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+            ),
+            FileText: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="16" y1="13" x2="8" y2="13"></line>
+                    <line x1="16" y1="17" x2="8" y2="17"></line>
+                    <polyline points="10 9 9 9 8 9"></polyline>
+                </svg>
+            ),
+            Zap: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"></polygon>
+                </svg>
+            ),
+            Info: () => (
+                <svg className="icon icon-small" viewBox="0 0 24 24">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="12" y1="16" x2="12" y2="12"></line>
+                    <line x1="12" y1="8" x2="12.01" y2="8"></line>
+                </svg>
+            ),
+            Database: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <ellipse cx="12" cy="5" rx="9" ry="3"></ellipse>
+                    <path d="M21 12c0 1.66-4 3-9 3s-9-1.34-9-3"></path>
+                    <path d="M3 5v14c0 1.66 4 3 9 3s9-1.34 9-3V5"></path>
+                </svg>
+            ),
+            Edit: () => (
+                <svg className="icon icon-small" viewBox="0 0 24 24">
+                    <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"></path>
+                    <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"></path>
+                </svg>
+            ),
+            Trash2: () => (
+                <svg className="icon icon-small" viewBox="0 0 24 24">
+                    <polyline points="3 6 5 6 21 6"></polyline>
+                    <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+            ),
+            Mail: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"></path>
+                    <polyline points="22,6 12,13 2,6"></polyline>
+                </svg>
+            ),
+            Send: () => (
+                <svg className="icon" viewBox="0 0 24 24">
+                    <line x1="22" y1="2" x2="11" y2="13"></line>
+                    <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+            ),
+            FileTemplate: () => (
+                <svg className="icon icon-small" viewBox="0 0 24 24">
+                    <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                    <polyline points="14 2 14 8 20 8"></polyline>
+                    <line x1="12" y1="11" x2="12" y2="17"></line>
+                    <line x1="9" y1="14" x2="15" y2="14"></line>
+                </svg>
+            ),
+        };
 
-  const saveDocument = () => {
-    const newDoc = {
-      ...currentDoc,
-      id: currentDoc.id || Date.now(),
-      createdAt: currentDoc.id ? currentDoc.createdAt : new Date().toISOString().split('T')[0]
-    };
-    
-    if (currentDoc.id) {
-      setDocuments(documents.map(d => d.id === currentDoc.id ? newDoc : d));
-    } else {
-      setDocuments([...documents, newDoc]);
-    }
-    
-    alert('保存しました');
-  };
+        const MaruttoPVKeiri = () => {
+            const [documents, setDocuments] = React.useState([]);
+            const [customers, setCustomers] = React.useState([]);
+            const [showCustomerDB, setShowCustomerDB] = React.useState(false);
+            const [showPreview, setShowPreview] = React.useState(false);
+            const [currentDoc, setCurrentDoc] = React.useState({
+                id: null,
+                type: 'proposal',
+                title: '',
+                client: '',
+                clientId: null,
+                projectInfo: {
+                    location: '',
+                    installationType: 'SG',
+                    installContent: '資材工事',
+                    panelCount: 0,
+                    panelWattPerUnit: 400,
+                    inverterCount: 0,
+                    inverterCapacityPerUnit: 50,
+                    dcCapacity: 0,
+                    acCapacity: 0
+                },
+                items: [
+                    { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+                    { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                    { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                    { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                    { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+                    { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
+                ],
+                notes: '',
+                createdAt: new Date().toISOString().split('T')[0],
+                status: 'draft'
+            });
+            const [showList, setShowList] = React.useState(false);
+            const [showPriceTable, setShowPriceTable] = React.useState(false);
+            const [emailModal, setEmailModal] = React.useState({ show: false, type: '' });
+            const [customerModal, setCustomerModal] = React.useState({ show: false, customer: null });
 
-  const convertDocument = (newType) => {
-    if (currentDoc.type === 'proposal' && newType === 'estimate') {
-      const updatedItems = currentDoc.items.map(item => ({
-        ...item,
-        estimatePrice: item.estimatePrice || Math.round(item.unitPrice * 1.15)
-      }));
-      setCurrentDoc({ ...currentDoc, type: newType, items: updatedItems });
-    } else {
-      setCurrentDoc({ ...currentDoc, type: newType });
-    }
-    alert(`${getDocTypeName(newType)}に変換しました`);
-  };
+            // 備考テンプレート
+            const noteTemplates = [
+                { 
+                    name: '標準テンプレート', 
+                    content: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時30%、中間時40%、完成時30%\n【その他】系統連系申請費用を含む' 
+                },
+                { 
+                    name: '短納期テンプレート', 
+                    content: '【工期】約2ヶ月（短納期対応）\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時50%、完成時50%\n【注意事項】短納期のため、天候により工期が延長する場合があります' 
+                },
+                { 
+                    name: '営農型テンプレート', 
+                    content: '【工期】約4ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【農地一時転用】申請支援を含む\n【遮光率】30%以下で設計\n【支柱高さ】最低地上高3m確保' 
+                },
+                {
+                    name: '屋根設置テンプレート',
+                    content: '【工期】約1.5ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証、防水工事：10年保証\n【屋根診断】設置前に無料診断実施\n【注意事項】屋根の状態により補強工事が必要な場合があります'
+                }
+            ];
 
-  const getDocTypeName = (type) => {
-    const names = {
-      proposal: '起案書',
-      estimate: '見積書',
-      invoice: '請求書',
-      order: '注文書'
-    };
-    return names[type] || type;
-  };
+            // 設置タイプの説明
+            const installationTypes = {
+                SG: { name: '野立て', description: '地面に直接設置する標準的な太陽光発電システム' },
+                SR: { name: '屋根設置', description: '建物の屋根に設置する省スペース型システム' },
+                SC: { name: 'カーポート型', description: '駐車場の屋根として機能する太陽光発電システム' },
+                SS: { name: '営農型', description: '農業と太陽光発電を両立させるソーラーシェアリング' },
+                SV: { name: '垂直型', description: '垂直に設置し両面発電が可能な次世代型システム' },
+                SH: { name: 'ハウス型', description: '農業用ハウスに設置する特殊型システム' },
+                ST: { name: '追尾型', description: '太陽の動きを追尾して発電効率を最大化するシステム' }
+            };
 
-  const loadDocument = (doc) => {
-    setCurrentDoc(doc);
-    setShowList(false);
-  };
+            // 設置内容の選択肢
+            const installContentOptions = ['一式', '資材', '工事', '資材工事', '申請', 'その他'];
 
-  const newDocument = () => {
-    setCurrentDoc({
-      id: null,
-      type: 'proposal',
-      title: '',
-      client: '',
-      clientId: null,
-      projectInfo: {
-        location: '',
-        installationType: 'SG',
-        installContent: '資材工事',
-        panelCount: 0,
-        panelWattPerUnit: 400,
-        inverterCount: 0,
-        inverterCapacityPerUnit: 50,
-        dcCapacity: 0,
-        acCapacity: 0
-      },
-      items: [
-        { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-        { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-        { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-        { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-        { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-        { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
-      ],
-      notes: '',
-      createdAt: new Date().toISOString().split('T')[0],
-      status: 'draft'
-    });
-    setShowList(false);
-    setShowPriceTable(false);
-  };
+            // 資材価格表
+            const priceTable = {
+                panels: [
+                    { name: '400W単結晶パネル（標準）', price: 24000, description: '標準的な高効率パネル' },
+                    { name: '450W単結晶パネル（高効率）', price: 28000, description: '最新の高効率パネル' },
+                    { name: '両面発電パネル（営農型用）', price: 32000, description: '営農型に最適な両面発電' }
+                ],
+                inverters: [
+                    { name: '50kWパワコン（標準）', price: 780000, description: '標準的な50kWパワコン' },
+                    { name: '100kWパワコン（大型）', price: 1400000, description: '大規模発電所向け' },
+                    { name: '25kWパワコン（小型）', price: 450000, description: '小規模設備向け' }
+                ],
+                mountings: [
+                    { name: '野立て架台（標準）', price: 12000, description: '標準的な野立て用架台/枚' },
+                    { name: '屋根用架台', price: 8500, description: '屋根設置用軽量架台/枚' },
+                    { name: 'カーポート架台', price: 25000, description: 'カーポート型架台/枚' },
+                    { name: '営農型架台（高架）', price: 35000, description: '営農型用高架架台/枚' },
+                    { name: '追尾架台', price: 45000, description: '1軸追尾システム付き架台/枚' }
+                ]
+            };
 
-  const selectCustomer = (customer) => {
-    setCurrentDoc({
-      ...currentDoc,
-      client: customer.name,
-      clientId: customer.id
-    });
-    alert(`顧客「${customer.name}」を選択しました`);
-  };
+            // サンプルデータ
+            React.useEffect(() => {
+                // 顧客データ
+                const sampleCustomers = [
+                    {
+                        id: 1,
+                        name: '株式会社サンプル工業',
+                        email: 'info@sample-kogyo.co.jp',
+                        phone: '048-123-4567',
+                        address: '埼玉県さいたま市...',
+                        contactPerson: '山田太郎'
+                    },
+                    {
+                        id: 2,
+                        name: '△△物流株式会社',
+                        email: 'contact@delta-logistics.jp',
+                        phone: '043-234-5678',
+                        address: '千葉県千葉市...',
+                        contactPerson: '鈴木花子'
+                    }
+                ];
+                setCustomers(sampleCustomers);
 
-  const sendEmail = () => {
-    if (currentDoc.type === 'proposal') {
-      alert('起案書はメール送信できません。見積書、請求書、注文書に変換してから送信してください。');
-      setEmailModal({ show: false, type: '' });
-      return;
-    }
-    
-    const customer = customers.find(c => c.id === currentDoc.clientId);
-    const email = customer ? customer.email : '未登録';
-    
-    alert(`${getDocTypeName(emailModal.type)}をメールで送信しました\n送信先: ${currentDoc.client}\nメールアドレス: ${email}`);
-    setEmailModal({ show: false, type: '' });
-  };
+                // 書類データ
+                const savedDocs = [
+                    {
+                        id: 1,
+                        type: 'proposal',
+                        title: '○○工場 太陽光発電設備設置工事',
+                        client: '株式会社サンプル工業',
+                        clientId: 1,
+                        projectInfo: {
+                            location: '埼玉県',
+                            installationType: 'SR',
+                            installContent: '資材工事',
+                            panelCount: 1250,
+                            panelWattPerUnit: 400,
+                            inverterCount: 10,
+                            inverterCapacityPerUnit: 50,
+                            dcCapacity: 500,
+                            acCapacity: 500
+                        },
+                        items: [
+                            { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 2500000, estimatePrice: 3000000 },
+                            { category: '太陽光パネル', description: '400W単結晶パネル', quantity: 1250, unitPrice: 24000, estimatePrice: 26000 },
+                            { category: 'パワコン', description: '50kWパワーコンディショナー', quantity: 10, unitPrice: 780000, estimatePrice: 850000 },
+                            { category: '架台', description: '屋根置き架台', quantity: 1250, unitPrice: 8500, estimatePrice: 9500 },
+                            { category: '電気工事', description: '配線・系統連系工事', quantity: 1, unitPrice: 8000000, estimatePrice: 9600000 },
+                            { category: '基礎工事', description: '屋根補強工事', quantity: 1, unitPrice: 3000000, estimatePrice: 3600000 }
+                        ],
+                        notes: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証',
+                        createdAt: '2025-01-10',
+                        status: 'completed'
+                    }
+                ];
+                setDocuments(savedDocs);
+            }, []);
 
-  const downloadPDF = () => {
-    alert(`${getDocTypeName(currentDoc.type)}をPDFでダウンロードしました\nファイル名: ${currentDoc.title}_${getDocTypeName(currentDoc.type)}.pdf`);
-  };
+            // DC/AC容量の自動計算
+            React.useEffect(() => {
+                const dcCapacity = (currentDoc.projectInfo.panelCount * currentDoc.projectInfo.panelWattPerUnit) / 1000;
+                const acCapacity = currentDoc.projectInfo.inverterCount * currentDoc.projectInfo.inverterCapacityPerUnit;
+                
+                setCurrentDoc(prev => ({
+                    ...prev,
+                    projectInfo: {
+                        ...prev.projectInfo,
+                        dcCapacity: dcCapacity,
+                        acCapacity: acCapacity
+                    }
+                }));
+            }, [currentDoc.projectInfo.panelCount, currentDoc.projectInfo.panelWattPerUnit, 
+                currentDoc.projectInfo.inverterCount, currentDoc.projectInfo.inverterCapacityPerUnit]);
 
-  const applyNoteTemplate = (template) => {
-    setCurrentDoc({
-      ...currentDoc,
-      notes: template.content
-    });
-  };
+            const calculateTotal = (useEstimatePrice = false) => {
+                return currentDoc.items.reduce((sum, item) => {
+                    const price = useEstimatePrice ? item.estimatePrice : item.unitPrice;
+                    return sum + (item.quantity * price);
+                }, 0);
+            };
 
-  const saveCustomer = (customer) => {
-    if (customer.id) {
-      setCustomers(customers.map(c => c.id === customer.id ? customer : c));
-    } else {
-      setCustomers([...customers, { ...customer, id: Date.now() }]);
-    }
-    setCustomerModal({ show: false, customer: null });
-    alert('顧客情報を保存しました');
-  };
+            const calculateMargin = () => {
+                const cost = calculateTotal(false);
+                const estimate = calculateTotal(true);
+                return estimate - cost;
+            };
 
-  const deleteCustomer = (id) => {
-    if (window.confirm('この顧客を削除しますか？')) {
-      setCustomers(customers.filter(c => c.id !== id));
-    }
-  };
+            const calculateMarginRate = () => {
+                const cost = calculateTotal(false);
+                const margin = calculateMargin();
+                return cost > 0 ? (margin / cost * 100).toFixed(1) : 0;
+            };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
-  };
+            const addItem = () => {
+                setCurrentDoc({
+                    ...currentDoc,
+                    items: [...currentDoc.items, { category: 'その他', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }]
+                });
+            };
 
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {/* ヘッダー */}
-      <header className="bg-green-600 text-white p-4 shadow-lg">
-        <div className="max-w-7xl mx-auto flex items-center justify-between">
-          <div className="flex items-center space-x-3">
-            <Sun className="w-8 h-8" />
-            <h1 className="text-2xl font-bold">まるっとPV経理</h1>
-          </div>
-          <div className="flex items-center space-x-4">
-            <button
-              onClick={() => setShowCustomerDB(!showCustomerDB)}
-              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
-            >
-              <Users className="w-5 h-5" />
-              <span>顧客DB</span>
-            </button>
-            <button
-              onClick={() => setShowPriceTable(!showPriceTable)}
-              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
-            >
-              <Package className="w-5 h-5" />
-              <span>価格表</span>
-            </button>
-            <button
-              onClick={() => setShowList(!showList)}
-              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
-            >
-              <List className="w-5 h-5" />
-              <span>書類一覧</span>
-            </button>
-            <button
-              onClick={newDocument}
-              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
-            >
-              <Plus className="w-5 h-5" />
-              <span>新規作成</span>
-            </button>
-          </div>
-        </div>
-      </header>
+            const updateItem = (index, field, value) => {
+                const newItems = [...currentDoc.items];
+                if (field === 'quantity' || field === 'unitPrice' || field === 'estimatePrice') {
+                    newItems[index][field] = Number(value);
+                } else {
+                    newItems[index][field] = value;
+                }
+                setCurrentDoc({ ...currentDoc, items: newItems });
+            };
 
-      <div className="max-w-7xl mx-auto p-6">
-        {showCustomerDB ? (
-          /* 顧客データベース */
-          <div className="bg-white rounded-lg shadow p-6">
-            <div className="flex justify-between items-center mb-4">
-              <h2 className="text-xl font-bold">顧客データベース</h2>
-              <button
-                onClick={() => setCustomerModal({ show: true, customer: null })}
-                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
-              >
-                <Plus className="w-5 h-5" />
-                <span>新規顧客登録</span>
-              </button>
-            </div>
-            <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-100">
-                  <tr>
-                    <th className="px-4 py-2 text-left">顧客名</th>
-                    <th className="px-4 py-2 text-left">メールアドレス</th>
-                    <th className="px-4 py-2 text-left">電話番号</th>
-                    <th className="px-4 py-2 text-left">担当者</th>
-                    <th className="px-4 py-2 text-center">操作</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {customers.map((customer) => (
-                    <tr key={customer.id} className="border-b hover:bg-gray-50">
-                      <td className="px-4 py-2">{customer.name}</td>
-                      <td className="px-4 py-2">{customer.email}</td>
-                      <td className="px-4 py-2">{customer.phone}</td>
-                      <td className="px-4 py-2">{customer.contactPerson}</td>
-                      <td className="px-4 py-2 text-center">
-                        <button
-                          onClick={() => selectCustomer(customer)}
-                          className="text-green-600 hover:text-green-800 mr-2"
-                        >
-                          選択
-                        </button>
-                        <button
-                          onClick={() => setCustomerModal({ show: true, customer })}
-                          className="text-blue-600 hover:text-blue-800 mr-2"
-                        >
-                          <Edit className="w-4 h-4 inline" />
-                        </button>
-                        <button
-                          onClick={() => deleteCustomer(customer.id)}
-                          className="text-red-600 hover:text-red-800"
-                        >
-                          <Trash2 className="w-4 h-4 inline" />
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        ) : showPriceTable ? (
-          /* 価格表 */
-          <div className="bg-white rounded-lg shadow p-6">
-            <h2 className="text-xl font-bold mb-4">資材価格表</h2>
-            
-            <div className="mb-6">
-              <h3 className="font-bold mb-2">太陽光パネル</h3>
-              <div className="grid grid-cols-1 md:gri
+            const removeItem = (index) => {
+                if (currentDoc.items.length > 1) {
+                    const newItems = currentDoc.items.filter((_, i) => i !== index);
+                    setCurrentDoc({ ...currentDoc, items: newItems });
+                }
+            };
+
+            const updateProjectInfo = (field, value) => {
+                setCurrentDoc({
+                    ...currentDoc,
+                    projectInfo: { ...currentDoc.projectInfo, [field]: value }
+                });
+            };
+
+            const addFromPriceTable = (category, item) => {
+                const newItem = {
+                    category: category === 'panels' ? '太陽光パネル' : category === 'inverters' ? 'パワコン' : '架台',
+                    description: item.name,
+                    quantity: 1,
+                    unitPrice: item.price,
+                    estimatePrice: Math.round(item.price * 1.15)
+                };
+                setCurrentDoc({
+                    ...currentDoc,
+                    items: [...currentDoc.items, newItem]
+                });
+                alert(`${item.name}を追加しました`);
+            };
+
+            // AI推測機能
+            const suggestEstimate = () => {
+                const dcCapacity = currentDoc.projectInfo.dcCapacity;
+                if (!dcCapacity || !currentDoc.projectInfo.location) {
+                    alert('DC容量と設置場所を入力してください');
+                    return;
+                }
+
+                const panelWatt = currentDoc.projectInfo.panelWattPerUnit || 400;
+                const inverterCapacity = currentDoc.projectInfo.inverterCapacityPerUnit || 50;
+                
+                const panelCount = Math.ceil((dcCapacity * 1000) / panelWatt);
+                const inverterCount = Math.ceil(dcCapacity / inverterCapacity);
+                
+                // 設置タイプに応じた価格調整
+                const typeMultiplier = {
+                    SG: 1.0,
+                    SR: 0.9,
+                    SC: 1.3,
+                    SS: 1.5,
+                    SV: 1.4,
+                    SH: 1.2,
+                    ST: 1.8
+                };
+                
+                const multiplier = typeMultiplier[currentDoc.projectInfo.installationType] || 1.0;
+                
+                const suggestion = {
+                    panelCount,
+                    inverterCount,
+                    items: [
+                        { 
+                            category: '設計費', 
+                            description: '基本設計・詳細設計・申請業務', 
+                            quantity: 1, 
+                            unitPrice: Math.round(dcCapacity * 5000 * multiplier),
+                            estimatePrice: Math.round(dcCapacity * 5000 * multiplier * 1.2)
+                        },
+                        { 
+                            category: '太陽光パネル', 
+                            description: `${panelWatt}W単結晶パネル`, 
+                            quantity: panelCount, 
+                            unitPrice: 24000,
+                            estimatePrice: 26000
+                        },
+                        { 
+                            category: 'パワコン', 
+                            description: `${inverterCapacity}kWパワーコンディショナー`, 
+                            quantity: inverterCount, 
+                            unitPrice: 780000,
+                            estimatePrice: 850000
+                        },
+                        { 
+                            category: '架台', 
+                            description: installationTypes[currentDoc.projectInfo.installationType].name + '架台', 
+                            quantity: panelCount, 
+                            unitPrice: Math.round(12000 * multiplier),
+                            estimatePrice: Math.round(13000 * multiplier)
+                        },
+                        { 
+                            category: '電気工事', 
+                            description: dcCapacity > 500 ? '高圧受電設備・配線工事' : '配線・系統連系工事', 
+                            quantity: 1, 
+                            unitPrice: Math.round(dcCapacity * 15000 * multiplier),
+                            estimatePrice: Math.round(dcCapacity * 18000 * multiplier)
+                        },
+                        { 
+                            category: '基礎工事', 
+                            description: currentDoc.projectInfo.installationType === 'SR' ? '屋根補強工事' : '造成・杭打ち工事', 
+                            quantity: 1, 
+                            unitPrice: Math.round(dcCapacity * 8000 * multiplier),
+                            estimatePrice: Math.round(dcCapacity * 9600 * multiplier)
+                        }
+                    ]
+                };
+                
+                if (window.confirm('AI推測結果を反映しますか？\n\n' +
+                    `推定パネル数: ${panelCount}枚\n` +
+                    `推定パワコン数: ${inverterCount}台\n` +
+                    `推定原価: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toLocaleString()}\n` +
+                    `推定見積額: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.estimatePrice, 0).toLocaleString()}`)) {
+                    setCurrentDoc({
+                        ...currentDoc,
+                        projectInfo: {
+                            ...currentDoc.projectInfo,
+                            panelCount,
+                            inverterCount
+                        },
+                        items: suggestion.items
+                    });
+                }
+            };
+
+            const saveDocument = () => {
+                const newDoc = {
+                    ...currentDoc,
+                    id: currentDoc.id || Date.now(),
+                    createdAt: currentDoc.id ? currentDoc.createdAt : new Date().toISOString().split('T')[0]
+                };
+                
+                if (currentDoc.id) {
+                    setDocuments(documents.map(d => d.id === currentDoc.id ? newDoc : d));
+                } else {
+                    setDocuments([...documents, newDoc]);
+                }
+                
+                alert('保存しました');
+            };
+          const convertDocument = (newType) => {
+                if (currentDoc.type === 'proposal' && newType === 'estimate') {
+                    const updatedItems = currentDoc.items.map(item => ({
+                        ...item,
+                        estimatePrice: item.estimatePrice || Math.round(item.unitPrice * 1.15)
+                    }));
+                    setCurrentDoc({ ...currentDoc, type: newType, items: updatedItems });
+                } else {
+                    setCurrentDoc({ ...currentDoc, type: newType });
+                }
+                alert(`${getDocTypeName(newType)}に変換しました`);
+            };
+
+            const getDocTypeName = (type) => {
+                const names = {
+                    proposal: '起案書',
+                    estimate: '見積書',
+                    invoice: '請求書',
+                    order: '注文書'
+                };
+                return names[type] || type;
+            };
+
+            const loadDocument = (doc) => {
+                setCurrentDoc(doc);
+                setShowList(false);
+            };
+
+            const newDocument = () => {
+                setCurrentDoc({
+                    id: null,
+                    type: 'proposal',
+                    title: '',
+                    client: '',
+                    clientId: null,
+                    projectInfo: {
+                        location: '',
+                        installationType: 'SG',
+                        installContent: '資材工事',
+                        panelCount: 0,
+                        panelWattPerUnit: 400,
+                        inverterCount: 0,
+                        inverterCapacityPerUnit: 50,
+                        dcCapacity: 0,
+                        acCapacity: 0
+                    },
+                    items: [
+                        { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+                        { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                        { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                        { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+                        { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+                        { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
+                    ],
+                    notes: '',
+                    createdAt: new Date().toISOString().split('T')[0],
+                    status: 'draft'
+                });
+                setShowList(false);
+                setShowPriceTable(false);
+            };
+
+            const selectCustomer = (customer) => {
+                setCurrentDoc({
+                    ...currentDoc,
+                    client: customer.name,
+                    clientId: customer.id
+                });
+                alert(`顧客「${customer.name}」を選択しました`);
+            };
+
+            const sendEmail = () => {
+                if (currentDoc.type === 'proposal') {
+                    alert('起案書はメール送信できません。見積書、請求書、注文書に変換してから送信してください。');
+                    setEmailModal({ show: false, type: '' });
+                    return;
+                }
+                
+                const customer = customers.find(c => c.id === currentDoc.clientId);
+                const email = customer ? customer.email : '未登録';
+                
+                alert(`${getDocTypeName(emailModal.type)}をメールで送信しました\n送信先: ${currentDoc.client}\nメールアドレス: ${email}`);
+                setEmailModal({ show: false, type: '' });
+            };
+
+            const downloadPDF = () => {
+                alert(`${getDocTypeName(currentDoc.type)}をPDFでダウンロードしました\nファイル名: ${currentDoc.title}_${getDocTypeName(currentDoc.type)}.pdf`);
+            };
+
+            const applyNoteTemplate = (template) => {
+                setCurrentDoc({
+                    ...currentDoc,
+                    notes: template.content
+                });
+            };
+
+            const saveCustomer = (customer) => {
+                if (customer.id) {
+                    setCustomers(customers.map(c => c.id === customer.id ? customer : c));
+                } else {
+                    setCustomers([...customers, { ...customer, id: Date.now() }]);
+                }
+                setCustomerModal({ show: false, customer: null });
+                alert('顧客情報を保存しました');
+            };
+
+            const deleteCustomer = (id) => {
+                if (window.confirm('この顧客を削除しますか？')) {
+                    setCustomers(customers.filter(c => c.id !== id));
+                }
+            };
+
+            const formatCurrency = (amount) => {
+                return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
+            };
+
+            return (
+                <div className="min-h-screen bg-gray-50">
+                    {/* ヘッダー */}
+                    <header className="bg-green-600 text-white p-4 shadow-lg">
+                        <div className="max-w-7xl mx-auto flex items-center justify-between">
+                            <div className="flex items-center space-x-3">
+                                <Icons.Sun />
+                                <h1 className="text-2xl font-bold">まるっとPV経理</h1>
+                            </div>
+                            <div className="flex items-center space-x-4">
+                                <button
+                                    onClick={() => setShowCustomerDB(!showCustomerDB)}
+                                    className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+                                >
+                                    <Icons.Users />
+                                    <span>顧客DB</span>
+                                </button>
+                                <button
+                                    onClick={() => setShowPriceTable(!showPriceTable)}
+                                    className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+                                >
+                                    <Icons.Package />
+                                    <span>価格表</span>
+                                </button>
+                                <button
+                                    onClick={() => setShowList(!showList)}
+                                    className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+                                >
+                                    <Icons.List />
+                                    <span>書類一覧</span>
+                                </button>
+                                <button
+                                    onClick={newDocument}
+                                    className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+                                >
+                                    <Icons.Plus />
+                                    <span>新規作成</span>
+                                </button>
+                            </div>
+                        </div>
+                    </header>
+                   <div className="max-w-7xl mx-auto p-6">
+                        {showCustomerDB ? (
+                            /* 顧客データベース */
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h2 className="text-xl font-bold">顧客データベース</h2>
+                                    <button
+                                        onClick={() => setCustomerModal({ show: true, customer: null })}
+                                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                    >
+                                        <Icons.Plus />
+                                        <span>新規顧客登録</span>
+                                    </button>
+                                </div>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left">顧客名</th>
+                                                <th className="px-4 py-2 text-left">メールアドレス</th>
+                                                <th className="px-4 py-2 text-left">電話番号</th>
+                                                <th className="px-4 py-2 text-left">担当者</th>
+                                                <th className="px-4 py-2 text-center">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {customers.map((customer) => (
+                                                <tr key={customer.id} className="border-b hover:bg-gray-50">
+                                                    <td className="px-4 py-2">{customer.name}</td>
+                                                    <td className="px-4 py-2">{customer.email}</td>
+                                                    <td className="px-4 py-2">{customer.phone}</td>
+                                                    <td className="px-4 py-2">{customer.contactPerson}</td>
+                                                    <td className="px-4 py-2 text-center">
+                                                        <button
+                                                            onClick={() => selectCustomer(customer)}
+                                                            className="text-green-600 hover:text-green-800 mr-2"
+                                                        >
+                                                            選択
+                                                        </button>
+                                                        <button
+                                                            onClick={() => setCustomerModal({ show: true, customer })}
+                                                            className="text-blue-600 hover:text-blue-800 mr-2"
+                                                        >
+                                                            <Icons.Edit />
+                                                        </button>
+                                                        <button
+                                                            onClick={() => deleteCustomer(customer.id)}
+                                                            className="text-red-600 hover:text-red-800"
+                                                        >
+                                                            <Icons.Trash2 />
+                                                        </button>
+                                                    </td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : showPriceTable ? (
+                            /* 価格表 */
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <h2 className="text-xl font-bold mb-4">資材価格表</h2>
+                                
+                                <div className="mb-6">
+                                    <h3 className="font-bold mb-2">太陽光パネル</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {priceTable.panels.map((item, index) => (
+                                            <div key={index} className="border rounded p-4 hover:bg-gray-50">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h4 className="font-semibold">{item.name}</h4>
+                                                        <p className="text-sm text-gray-600">{item.description}</p>
+                                                        <p className="text-lg font-bold text-green-600">{formatCurrency(item.price)}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => addFromPriceTable('panels', item)}
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <Icons.Plus />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-6">
+                                    <h3 className="font-bold mb-2">パワーコンディショナー</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {priceTable.inverters.map((item, index) => (
+                                            <div key={index} className="border rounded p-4 hover:bg-gray-50">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h4 className="font-semibold">{item.name}</h4>
+                                                        <p className="text-sm text-gray-600">{item.description}</p>
+                                                        <p className="text-lg font-bold text-green-600">{formatCurrency(item.price)}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => addFromPriceTable('inverters', item)}
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <Icons.Plus />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                <div className="mb-6">
+                                    <h3 className="font-bold mb-2">架台</h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                        {priceTable.mountings.map((item, index) => (
+                                            <div key={index} className="border rounded p-4 hover:bg-gray-50">
+                                                <div className="flex justify-between items-start">
+                                                    <div>
+                                                        <h4 className="font-semibold">{item.name}</h4>
+                                                        <p className="text-sm text-gray-600">{item.description}</p>
+                                                        <p className="text-lg font-bold text-green-600">{formatCurrency(item.price)}</p>
+                                                    </div>
+                                                    <button
+                                                        onClick={() => addFromPriceTable('mountings', item)}
+                                                        className="text-blue-600 hover:text-blue-800"
+                                                    >
+                                                        <Icons.Plus />
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+                        ) : showList ? (
+                            /* 書類一覧 */
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <h2 className="text-xl font-bold mb-4">保存済み書類一覧</h2>
+                                <div className="overflow-x-auto">
+                                    <table className="w-full">
+                                        <thead className="bg-gray-100">
+                                            <tr>
+                                                <th className="px-4 py-2 text-left">日付</th>
+                                                <th className="px-4 py-2 text-left">種類</th>
+                                                <th className="px-4 py-2 text-left">タイトル</th>
+                                                <th className="px-4 py-2 text-left">顧客名</th>
+                                                <th className="px-4 py-2 text-left">DC/AC容量</th>
+                                                <th className="px-4 py-2 text-right">原価</th>
+                                                <th className="px-4 py-2 text-right">見積額</th>
+                                                <th className="px-4 py-2 text-center">操作</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {documents.map((doc) => {
+                                                const cost = doc.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0);
+                                                const estimate = doc.items.reduce((sum, item) => sum + item.quantity * item.estimatePrice, 0);
+                                                return (
+                                                    <tr key={doc.id} className="border-b hover:bg-gray-50">
+                                                        <td className="px-4 py-2">{doc.createdAt}</td>
+                                                        <td className="px-4 py-2">
+                                                            <span className="inline-block px-2 py-1 text-xs rounded bg-green-100 text-green-800">
+                                                                {getDocTypeName(doc.type)}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2">{doc.title}</td>
+                                                        <td className="px-4 py-2">{doc.client}</td>
+                                                        <td className="px-4 py-2">{doc.projectInfo.dcCapacity}kW/{doc.projectInfo.acCapacity}kW</td>
+                                                        <td className="px-4 py-2 text-right">{formatCurrency(cost)}</td>
+                                                        <td className="px-4 py-2 text-right">{formatCurrency(estimate)}</td>
+                                                        <td className="px-4 py-2 text-center">
+                                                            <button
+                                                                onClick={() => loadDocument(doc)}
+                                                                className="text-blue-600 hover:text-blue-800"
+                                                            >
+                                                                <Icons.Edit />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        ) : (
+                  /* 書類編集画面 */
+                            <div className="bg-white rounded-lg shadow p-6">
+                                <div className="mb-6 flex justify-between items-center">
+                                    <h2 className="text-2xl font-bold flex items-center space-x-2">
+                                        <Icons.FileText />
+                                        <span>{getDocTypeName(currentDoc.type)}</span>
+                                    </h2>
+                                    <div className="flex space-x-2">
+                                        <button
+                                            onClick={saveDocument}
+                                            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        >
+                                            <Icons.Save />
+                                            <span>保存</span>
+                                        </button>
+                                        <button
+                                            onClick={suggestEstimate}
+                                            className="flex items-center space-x-2 bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                        >
+                                            <Icons.Brain />
+                                            <span>AI推測</span>
+                                        </button>
+                                        <button
+                                            onClick={() => setShowPreview(!showPreview)}
+                                            className="flex items-center space-x-2 bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                                        >
+                                            <Icons.Eye />
+                                            <span>プレビュー</span>
+                                        </button>
+                                        <button
+                                            onClick={downloadPDF}
+                                            className="flex items-center space-x-2 bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+                                        >
+                                            <Icons.Download />
+                                            <span>PDF保存</span>
+                                        </button>
+                                    </div>
+                                </div>
+
+                                {/* 基本情報 */}
+                                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">タイトル</label>
+                                        <input
+                                            type="text"
+                                            value={currentDoc.title}
+                                            onChange={(e) => setCurrentDoc({ ...currentDoc, title: e.target.value })}
+                                            className="w-full border rounded px-3 py-2"
+                                            placeholder="例: ○○工場 太陽光発電設備設置工事"
+                                        />
+                                    </div>
+                                    <div>
+                                        <label className="block text-sm font-medium mb-1">顧客名</label>
+                                        <div className="flex space-x-2">
+                                            <input
+                                                type="text"
+                                                value={currentDoc.client}
+                                                onChange={(e) => setCurrentDoc({ ...currentDoc, client: e.target.value })}
+                                                className="flex-1 border rounded px-3 py-2"
+                                                placeholder="例: 株式会社○○"
+                                            />
+                                            <button
+                                                onClick={() => setShowCustomerDB(true)}
+                                                className="bg-green-600 text-white px-3 py-2 rounded hover:bg-green-700"
+                                            >
+                                                <Icons.Database />
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* プロジェクト情報 */}
+                                <div className="bg-green-50 p-4 rounded mb-6">
+                                    <h3 className="font-bold mb-3 flex items-center">
+                                        <Icons.Zap />
+                                        <span className="ml-2">プロジェクト情報</span>
+                                    </h3>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">設置場所</label>
+                                            <input
+                                                type="text"
+                                                value={currentDoc.projectInfo.location}
+                                                onChange={(e) => updateProjectInfo('location', e.target.value)}
+                                                className="w-full border rounded px-3 py-2"
+                                                placeholder="例: 埼玉県"
+                                            />
+                                        </div>
+                                        <div className="relative">
+                                            <label className="block text-sm font-medium mb-1">
+                                                設置タイプ
+                                                <div className="group inline-block ml-1">
+                                                    <Icons.Info />
+                                                    <div className="absolute z-10 invisible group-hover:visible bg-gray-800 text-white text-sm rounded p-2 mt-1 w-64">
+                                                        {Object.entries(installationTypes).map(([key, value]) => (
+                                                            <div key={key} className="mb-1">
+                                                                <strong>{key}:</strong> {value.name} - {value.description}
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                </div>
+                                            </label>
+                                            <select
+                                                value={currentDoc.projectInfo.installationType}
+                                                onChange={(e) => updateProjectInfo('installationType', e.target.value)}
+                                                className="w-full border rounded px-3 py-2"
+                                            >
+                                                {Object.entries(installationTypes).map(([key, value]) => (
+                                                    <option key={key} value={key}>
+                                                        {key}: {value.name}
+                                                    </option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">設置内容</label>
+                                            <select
+                                                value={currentDoc.projectInfo.installContent}
+                                                onChange={(e) => updateProjectInfo('installContent', e.target.value)}
+                                                className="w-full border rounded px-3 py-2"
+                                            >
+                                                {installContentOptions.map(option => (
+                                                    <option key={option} value={option}>{option}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">パネル枚数</label>
+                                            <div className="flex space-x-2">
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.panelCount}
+                                                    onChange={(e) => updateProjectInfo('panelCount', e.target.value)}
+                                                    className="flex-1 border rounded px-3 py-2"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.panelWattPerUnit}
+                                                    onChange={(e) => updateProjectInfo('panelWattPerUnit', e.target.value)}
+                                                    className="w-20 border rounded px-3 py-2"
+                                                    placeholder="W/枚"
+                                                />
+                                                <span className="flex items-center text-sm">W/枚</span>
+                                            </div>
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">パワコン台数</label>
+                                            <div className="flex space-x-2">
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.inverterCount}
+                                                    onChange={(e) => updateProjectInfo('inverterCount', e.target.value)}
+                                                    className="flex-1 border rounded px-3 py-2"
+                                                />
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.inverterCapacityPerUnit}
+                                                    onChange={(e) => updateProjectInfo('inverterCapacityPerUnit', e.target.value)}
+                                                    className="w-20 border rounded px-3 py-2"
+                                                    placeholder="kW/台"
+                                                />
+                                                <span className="flex items-center text-sm">kW/台</span>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-2 gap-2">
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">DC容量 (kW)</label>
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.dcCapacity}
+                                                    readOnly
+                                                    className="w-full border rounded px-3 py-2 bg-gray-100"
+                                                />
+                                            </div>
+                                            <div>
+                                                <label className="block text-sm font-medium mb-1">AC容量 (kW)</label>
+                                                <input
+                                                    type="number"
+                                                    value={currentDoc.projectInfo.acCapacity}
+                                                    readOnly
+                                                    className="w-full border rounded px-3 py-2 bg-gray-100"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                               {/* 利益情報（起案書の場合） */}
+                                {currentDoc.type === 'proposal' && (
+                                    <div className="bg-blue-50 p-4 rounded mb-6">
+                                        <h3 className="font-bold mb-3">利益情報</h3>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div>
+                                                <label className="text-sm font-medium">原価合計</label>
+                                                <p className="text-lg font-bold">{formatCurrency(calculateTotal(false))}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium">見積額合計</label>
+                                                <p className="text-lg font-bold text-blue-600">{formatCurrency(calculateTotal(true))}</p>
+                                            </div>
+                                            <div>
+                                                <label className="text-sm font-medium">利益額（利益率）</label>
+                                                <p className="text-lg font-bold text-green-600">
+                                                    {formatCurrency(calculateMargin())} ({calculateMarginRate()}%)
+                                                </p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* 明細 */}
+                                <div className="mb-6">
+                                    <h3 className="font-bold mb-3">明細</h3>
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full">
+                                            <thead className="bg-gray-100">
+                                                <tr>
+                                                    <th className="px-4 py-2 text-left" style={{minWidth: '150px'}}>カテゴリ</th>
+                                                    <th className="px-4 py-2 text-left" style={{minWidth: '300px'}}>内容</th>
+                                                    <th className="px-4 py-2 text-center" style={{minWidth: '80px'}}>数量</th>
+                                                    <th className="px-4 py-2 text-right" style={{minWidth: '120px'}}>
+                                                        {currentDoc.type === 'proposal' ? '原価' : '単価'}
+                                                    </th>
+                                                    {currentDoc.type === 'proposal' && (
+                                                        <th className="px-4 py-2 text-right" style={{minWidth: '120px'}}>見積価格</th>
+                                                    )}
+                                                    <th className="px-4 py-2 text-right" style={{minWidth: '150px'}}>
+                                                        {currentDoc.type === 'proposal' ? '原価計' : '金額'}
+                                                    </th>
+                                                    {currentDoc.type === 'proposal' && (
+                                                        <th className="px-4 py-2 text-right" style={{minWidth: '150px'}}>見積額</th>
+                                                    )}
+                                                    <th className="px-4 py-2 text-center" style={{minWidth: '60px'}}>操作</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {currentDoc.items.map((item, index) => (
+                                                    <tr key={index} className="border-b">
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="text"
+                                                                value={item.category}
+                                                                onChange={(e) => updateItem(index, 'category', e.target.value)}
+                                                                className="w-full border rounded px-2 py-1"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="text"
+                                                                value={item.description}
+                                                                onChange={(e) => updateItem(index, 'description', e.target.value)}
+                                                                className="w-full border rounded px-2 py-1"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="number"
+                                                                value={item.quantity}
+                                                                onChange={(e) => updateItem(index, 'quantity', e.target.value)}
+                                                                className="w-full border rounded px-2 py-1 text-center"
+                                                            />
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <input
+                                                                type="number"
+                                                                value={item.unitPrice}
+                                                                onChange={(e) => updateItem(index, 'unitPrice', e.target.value)}
+                                                                className="w-full border rounded px-2 py-1 text-right"
+                                                            />
+                                                        </td>
+                                                        {currentDoc.type === 'proposal' && (
+                                                            <td className="px-4 py-2">
+                                                                <input
+                                                                    type="number"
+                                                                    value={item.estimatePrice}
+                                                                    onChange={(e) => updateItem(index, 'estimatePrice', e.target.value)}
+                                                                    className="w-full border rounded px-2 py-1 text-right"
+                                                                />
+                                                            </td>
+                                                        )}
+                                                        <td className="px-4 py-2 text-right">
+                                                            {formatCurrency(item.quantity * item.unitPrice)}
+                                                        </td>
+                                                        {currentDoc.type === 'proposal' && (
+                                                            <td className="px-4 py-2 text-right">
+                                                                {formatCurrency(item.quantity * item.estimatePrice)}
+                                                            </td>
+                                                        )}
+                                                        <td className="px-4 py-2 text-center">
+                                                            <button
+                                                                onClick={() => removeItem(index)}
+                                                                className="text-red-600 hover:text-red-800"
+                                                            >
+                                                                <Icons.Trash2 />
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr>
+                                                    <td colSpan={currentDoc.type === 'proposal' ? 5 : 3} className="px-4 py-2 text-right font-bold">
+                                                        {currentDoc.type === 'proposal' ? '原価合計:' : '合計:'}
+                                                    </td>
+                                                    <td className="px-4 py-2 text-right font-bold text-lg">
+                                                        {formatCurrency(calculateTotal(false))}
+                                                    </td>
+                                                    {currentDoc.type === 'proposal' && (
+                                                        <>
+                                                            <td className="px-4 py-2 text-right font-bold text-lg text-blue-600">
+                                                                {formatCurrency(calculateTotal(true))}
+                                                            </td>
+                                                        </>
+                                                    )}
+                                                    <td></td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    <button
+                                        onClick={addItem}
+                                        className="mt-2 flex items-center space-x-2 text-blue-600 hover:text-blue-800"
+                                    >
+                                        <Icons.Plus />
+                                        <span>項目を追加</span>
+                                    </button>
+                                </div>
+
+                                {/* 備考 */}
+                                <div className="mb-6">
+                                    <div className="flex justify-between items-center mb-1">
+                                        <label className="block text-sm font-medium">備考</label>
+                                        <div className="relative group">
+                                            <button className="flex items-center space-x-1 text-sm text-blue-600 hover:text-blue-800">
+                                                <Icons.FileTemplate />
+                                                <span>テンプレート</span>
+                                            </button>
+                                            <div className="absolute right-0 mt-1 w-64 bg-white border rounded shadow-lg invisible group-hover:visible z-10">
+                                                {noteTemplates.map((template, index) => (
+                                                    <button
+                                                        key={index}
+                                                        onClick={() => applyNoteTemplate(template)}
+                                                        className="block w-full text-left px-4 py-2 hover:bg-gray-100 text-sm"
+                                                    >
+                                                        {template.name}
+                                                    </button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <textarea
+                                        value={currentDoc.notes}
+                                        onChange={(e) => setCurrentDoc({ ...currentDoc, notes: e.target.value })}
+                                        className="w-full border rounded px-3 py-2"
+                                        rows="4"
+                                        placeholder="工期、保証期間、特記事項など"
+                                    />
+                                </div>
+                              {/* 変換・送信ボタン */}
+                                <div className="flex flex-wrap gap-2">
+                                    {currentDoc.type !== 'proposal' && (
+                                        <button
+                                            onClick={() => convertDocument('proposal')}
+                                            className="bg-gray-600 text-white px-4 py-2 rounded hover:bg-gray-700"
+                                        >
+                                            起案書に戻す
+                                        </button>
+                                    )}
+                                    {currentDoc.type !== 'estimate' && (
+                                        <button
+                                            onClick={() => convertDocument('estimate')}
+                                            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+                                        >
+                                            見積書に変換
+                                        </button>
+                                    )}
+                                    {currentDoc.type !== 'invoice' && (
+                                        <button
+                                            onClick={() => convertDocument('invoice')}
+                                            className="bg-orange-600 text-white px-4 py-2 rounded hover:bg-orange-700"
+                                        >
+                                            請求書に変換
+                                        </button>
+                                    )}
+                                    {currentDoc.type !== 'order' && (
+                                        <button
+                                            onClick={() => convertDocument('order')}
+                                            className="bg-purple-600 text-white px-4 py-2 rounded hover:bg-purple-700"
+                                        >
+                                            注文書に変換
+                                        </button>
+                                    )}
+                                    {currentDoc.type !== 'proposal' && (
+                                        <button
+                                            onClick={() => setEmailModal({ show: true, type: currentDoc.type })}
+                                            className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        >
+                                            <Icons.Mail />
+                                            <span>メール送信</span>
+                                        </button>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* プレビューモーダル */}
+                    {showPreview && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50">
+                            <div className="bg-white rounded-lg p-6 max-w-4xl w-full max-h-[90vh] overflow-y-auto">
+                                <div className="flex justify-between items-center mb-4">
+                                    <h3 className="text-xl font-bold">{getDocTypeName(currentDoc.type)}プレビュー</h3>
+                                    <button
+                                        onClick={() => setShowPreview(false)}
+                                        className="text-gray-600 hover:text-gray-800"
+                                    >
+                                        ✕
+                                    </button>
+                                </div>
+                                
+                                <div className="border p-8">
+                                    <div className="text-center mb-6">
+                                        <h1 className="text-2xl font-bold">{getDocTypeName(currentDoc.type)}</h1>
+                                    </div>
+                                    
+                                    <div className="mb-6">
+                                        <p className="text-right">{currentDoc.createdAt}</p>
+                                        <p className="mt-4"><strong>宛先:</strong> {currentDoc.client} 御中</p>
+                                        <p><strong>件名:</strong> {currentDoc.title}</p>
+                                    </div>
+                                    
+                                    <div className="mb-6">
+                                        <h3 className="font-bold mb-2">プロジェクト情報</h3>
+                                        <table className="w-full text-sm">
+                                            <tbody>
+                                                <tr>
+                                                    <td className="py-1">設置場所:</td>
+                                                    <td>{currentDoc.projectInfo.location}</td>
+                                                    <td>設置タイプ:</td>
+                                                    <td>{installationTypes[currentDoc.projectInfo.installationType].name}</td>
+                                                </tr>
+                                                <tr>
+                                                    <td className="py-1">DC容量:</td>
+                                                    <td>{currentDoc.projectInfo.dcCapacity}kW</td>
+                                                    <td>AC容量:</td>
+                                                    <td>{currentDoc.projectInfo.acCapacity}kW</td>
+                                                </tr>
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                    
+                                    <div className="mb-6">
+                                        <h3 className="font-bold mb-2">明細</h3>
+                                        <table className="w-full border">
+                                            <thead>
+                                                <tr className="bg-gray-100">
+                                                    <th className="border px-2 py-1 text-left">カテゴリ</th>
+                                                    <th className="border px-2 py-1 text-left">内容</th>
+                                                    <th className="border px-2 py-1 text-center">数量</th>
+                                                    <th className="border px-2 py-1 text-right">
+                                                        {currentDoc.type === 'proposal' ? '単価' : '単価'}
+                                                    </th>
+                                                    <th className="border px-2 py-1 text-right">金額</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {currentDoc.items.map((item, index) => {
+                                                    const price = currentDoc.type === 'proposal' ? item.estimatePrice : item.unitPrice;
+                                                    return (
+                                                        <tr key={index}>
+                                                            <td className="border px-2 py-1">{item.category}</td>
+                                                            <td className="border px-2 py-1">{item.description}</td>
+                                                            <td className="border px-2 py-1 text-center">{item.quantity}</td>
+                                                            <td className="border px-2 py-1 text-right">
+                                                                {currentDoc.type === 'proposal' ? formatCurrency(item.estimatePrice || item.unitPrice) : formatCurrency(item.unitPrice)}
+                                                            </td>
+                                                            <td className="border px-2 py-1 text-right">
+                                                                {formatCurrency(item.quantity * (currentDoc.type === 'proposal' ? (item.estimatePrice || item.unitPrice) : item.unitPrice))}
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })}
+                                            </tbody>
+                                            <tfoot>
+                                                <tr>
+                                                    <td colSpan="4" className="border px-2 py-1 text-right font-bold">合計:</td>
+                                                    <td className="border px-2 py-1 text-right font-bold">
+                                                        {formatCurrency(calculateTotal(currentDoc.type === 'proposal' ? true : false))}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                    
+                                    {currentDoc.notes && (
+                                        <div className="mb-6">
+                                            <h3 className="font-bold mb-2">備考</h3>
+                                            <pre className="whitespace-pre-wrap text-sm">{currentDoc.notes}</pre>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* 顧客登録モーダル */}
+                    {customerModal.show && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                                <h3 className="text-lg font-bold mb-4">
+                                    {customerModal.customer ? '顧客情報編集' : '新規顧客登録'}
+                                </h3>
+                                <form onSubmit={(e) => {
+                                    e.preventDefault();
+                                    const formData = new FormData(e.target);
+                                    saveCustomer({
+                                        id: customerModal.customer?.id,
+                                        name: formData.get('name'),
+                                        email: formData.get('email'),
+                                        phone: formData.get('phone'),
+                                        address: formData.get('address'),
+                                        contactPerson: formData.get('contactPerson')
+                                    });
+                                }}>
+                                    <div className="space-y-4">
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">顧客名</label>
+                                            <input
+                                                name="name"
+                                                type="text"
+                                                defaultValue={customerModal.customer?.name}
+                                                className="w-full border rounded px-3 py-2"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">メールアドレス</label>
+                                            <input
+                                                name="email"
+                                                type="email"
+                                                defaultValue={customerModal.customer?.email}
+                                                className="w-full border rounded px-3 py-2"
+                                                required
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">電話番号</label>
+                                            <input
+                                                name="phone"
+                                                type="tel"
+                                                defaultValue={customerModal.customer?.phone}
+                                                className="w-full border rounded px-3 py-2"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">住所</label>
+                                            <input
+                                                name="address"
+                                                type="text"
+                                                defaultValue={customerModal.customer?.address}
+                                                className="w-full border rounded px-3 py-2"
+                                            />
+                                        </div>
+                                        <div>
+                                            <label className="block text-sm font-medium mb-1">担当者</label>
+                                            <input
+                                                name="contactPerson"
+                                                type="text"
+                                                defaultValue={customerModal.customer?.contactPerson}
+                                                className="w-full border rounded px-3 py-2"
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="flex justify-end space-x-2 mt-6">
+                                        <button
+                                            type="button"
+                                            onClick={() => setCustomerModal({ show: false, customer: null })}
+                                            className="px-4 py-2 border rounded hover:bg-gray-100"
+                                        >
+                                            キャンセル
+                                        </button>
+                                        <button
+                                            type="submit"
+                                            className="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                        >
+                                            保存
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    )}
+
+                    {/* メール送信モーダル */}
+                    {emailModal.show && (
+                        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4">
+                            <div className="bg-white rounded-lg p-6 max-w-md w-full">
+                                <h3 className="text-lg font-bold mb-4">
+                                    {getDocTypeName(emailModal.type)}をメール送信
+                                </h3>
+                                <p className="mb-4">
+                                    以下の内容でメールを送信します：
+                                </p>
+                                <div className="bg-gray-100 p-4 rounded mb-4">
+                                    <p><strong>宛先:</strong> {currentDoc.client}</p>
+                                    <p><strong>メールアドレス:</strong> {customers.find(c => c.id === currentDoc.clientId)?.email || '未登録'}</p>
+                                    <p><strong>件名:</strong> {currentDoc.title} - {getDocTypeName(emailModal.type)}</p>
+                                    <p><strong>添付:</strong> {getDocTypeName(emailModal.type)}.pdf</p>
+                                </div>
+                                <div className="flex justify-end space-x-2">
+                                    <button
+                                        onClick={() => setEmailModal({ show: false, type: '' })}
+                                        className="px-4 py-2 border rounded hover:bg-gray-100"
+                                    >
+                                        キャンセル
+                                    </button>
+                                    <button
+                                        onClick={sendEmail}
+                                        className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+                                    >
+                                        <Icons.Send />
+                                        <span>送信</span>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<MaruttoPVKeiri />);
+    </script>
+</body>
+</html>
