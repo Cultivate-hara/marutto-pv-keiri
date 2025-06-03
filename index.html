@@ -1,169 +1,569 @@
+import React, { useState, useEffect } from 'react';
+import { FileText, Mail, Save, List, Plus, Edit, Trash2, Send, Brain, Sun, Zap, Package, Info, Users, Download, Database, Eye, FileTemplate } from 'lucide-react';
 
-<!DOCTYPE html>
-<html lang="ja">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>まるっとPV経理</title>
-    <script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-    <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="stylesheet" href="https://unpkg.com/lucide-static@0.263.1/font/lucide.css">
-</head>
-<body>
-    <div id="root"></div>
+const MaruttoPVKeiri = () => {
+  const [documents, setDocuments] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [showCustomerDB, setShowCustomerDB] = useState(false);
+  const [showPreview, setShowPreview] = useState(false);
+  const [currentDoc, setCurrentDoc] = useState({
+    id: null,
+    type: 'proposal',
+    title: '',
+    client: '',
+    clientId: null,
+    projectInfo: {
+      location: '',
+      installationType: 'SG',
+      installContent: '資材工事',
+      panelCount: 0,
+      panelWattPerUnit: 400,
+      inverterCount: 0,
+      inverterCapacityPerUnit: 50,
+      dcCapacity: 0,
+      acCapacity: 0
+    },
+    items: [
+      { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+      { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+      { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+      { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+      { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+      { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
+    ],
+    notes: '',
+    createdAt: new Date().toISOString().split('T')[0],
+    status: 'draft'
+  });
+  const [showList, setShowList] = useState(false);
+  const [showPriceTable, setShowPriceTable] = useState(false);
+  const [emailModal, setEmailModal] = useState({ show: false, type: '' });
+  const [customerModal, setCustomerModal] = useState({ show: false, customer: null });
+
+  // 備考テンプレート
+  const noteTemplates = [
+    { 
+      name: '標準テンプレート', 
+      content: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時30%、中間時40%、完成時30%\n【その他】系統連系申請費用を含む' 
+    },
+    { 
+      name: '短納期テンプレート', 
+      content: '【工期】約2ヶ月（短納期対応）\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時50%、完成時50%\n【注意事項】短納期のため、天候により工期が延長する場合があります' 
+    },
+    { 
+      name: '営農型テンプレート', 
+      content: '【工期】約4ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【農地一時転用】申請支援を含む\n【遮光率】30%以下で設計\n【支柱高さ】最低地上高3m確保' 
+    },
+    {
+      name: '屋根設置テンプレート',
+      content: '【工期】約1.5ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証、防水工事：10年保証\n【屋根診断】設置前に無料診断実施\n【注意事項】屋根の状態により補強工事が必要な場合があります'
+    }
+  ];
+
+  // 設置タイプの説明
+  const installationTypes = {
+    SG: { name: '野立て', description: '地面に直接設置する標準的な太陽光発電システム' },
+    SR: { name: '屋根設置', description: '建物の屋根に設置する省スペース型システム' },
+    SC: { name: 'カーポート型', description: '駐車場の屋根として機能する太陽光発電システム' },
+    SS: { name: '営農型', description: '農業と太陽光発電を両立させるソーラーシェアリング' },
+    SV: { name: '垂直型', description: '垂直に設置し両面発電が可能な次世代型システム' },
+    SH: { name: 'ハウス型', description: '農業用ハウスに設置する特殊型システム' },
+    ST: { name: '追尾型', description: '太陽の動きを追尾して発電効率を最大化するシステム' }
+  };
+
+  // 設置内容の選択肢
+  const installContentOptions = ['一式', '資材', '工事', '資材工事', '申請', 'その他'];
+
+  // 資材価格表
+  const priceTable = {
+    panels: [
+      { name: '400W単結晶パネル（標準）', price: 24000, description: '標準的な高効率パネル' },
+      { name: '450W単結晶パネル（高効率）', price: 28000, description: '最新の高効率パネル' },
+      { name: '両面発電パネル（営農型用）', price: 32000, description: '営農型に最適な両面発電' }
+    ],
+    inverters: [
+      { name: '50kWパワコン（標準）', price: 780000, description: '標準的な50kWパワコン' },
+      { name: '100kWパワコン（大型）', price: 1400000, description: '大規模発電所向け' },
+      { name: '25kWパワコン（小型）', price: 450000, description: '小規模設備向け' }
+    ],
+    mountings: [
+      { name: '野立て架台（標準）', price: 12000, description: '標準的な野立て用架台/枚' },
+      { name: '屋根用架台', price: 8500, description: '屋根設置用軽量架台/枚' },
+      { name: 'カーポート架台', price: 25000, description: 'カーポート型架台/枚' },
+      { name: '営農型架台（高架）', price: 35000, description: '営農型用高架架台/枚' },
+      { name: '追尾架台', price: 45000, description: '1軸追尾システム付き架台/枚' }
+    ]
+  };
+
+  // サンプルデータ
+  useEffect(() => {
+    // 顧客データ
+    const sampleCustomers = [
+      {
+        id: 1,
+        name: '株式会社サンプル工業',
+        email: 'info@sample-kogyo.co.jp',
+        phone: '048-123-4567',
+        address: '埼玉県さいたま市...',
+        contactPerson: '山田太郎'
+      },
+      {
+        id: 2,
+        name: '△△物流株式会社',
+        email: 'contact@delta-logistics.jp',
+        phone: '043-234-5678',
+        address: '千葉県千葉市...',
+        contactPerson: '鈴木花子'
+      }
+    ];
+    setCustomers(sampleCustomers);
+
+    // 書類データ
+    const savedDocs = [
+      {
+        id: 1,
+        type: 'proposal',
+        title: '○○工場 太陽光発電設備設置工事',
+        client: '株式会社サンプル工業',
+        clientId: 1,
+        projectInfo: {
+          location: '埼玉県',
+          installationType: 'SR',
+          installContent: '資材工事',
+          panelCount: 1250,
+          panelWattPerUnit: 400,
+          inverterCount: 10,
+          inverterCapacityPerUnit: 50,
+          dcCapacity: 500,
+          acCapacity: 500
+        },
+        items: [
+          { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 2500000, estimatePrice: 3000000 },
+          { category: '太陽光パネル', description: '400W単結晶パネル', quantity: 1250, unitPrice: 24000, estimatePrice: 26000 },
+          { category: 'パワコン', description: '50kWパワーコンディショナー', quantity: 10, unitPrice: 780000, estimatePrice: 850000 },
+          { category: '架台', description: '屋根置き架台', quantity: 1250, unitPrice: 8500, estimatePrice: 9500 },
+          { category: '電気工事', description: '配線・系統連系工事', quantity: 1, unitPrice: 8000000, estimatePrice: 9600000 },
+          { category: '基礎工事', description: '屋根補強工事', quantity: 1, unitPrice: 3000000, estimatePrice: 3600000 }
+        ],
+        notes: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証',
+        createdAt: '2025-01-10',
+        status: 'completed'
+      }
+    ];
+    setDocuments(savedDocs);
+  }, []);
+
+  // DC/AC容量の自動計算
+  useEffect(() => {
+    const dcCapacity = (currentDoc.projectInfo.panelCount * currentDoc.projectInfo.panelWattPerUnit) / 1000;
+    const acCapacity = currentDoc.projectInfo.inverterCount * currentDoc.projectInfo.inverterCapacityPerUnit;
     
-    <script type="text/babel">
-        // Lucideアイコンコンポーネント
-        const Icon = ({ name, className = "w-5 h-5" }) => {
-            return <i className={`lucide-${name} ${className}`}></i>;
-        };
+    setCurrentDoc(prev => ({
+      ...prev,
+      projectInfo: {
+        ...prev.projectInfo,
+        dcCapacity: dcCapacity,
+        acCapacity: acCapacity
+      }
+    }));
+  }, [currentDoc.projectInfo.panelCount, currentDoc.projectInfo.panelWattPerUnit, 
+      currentDoc.projectInfo.inverterCount, currentDoc.projectInfo.inverterCapacityPerUnit]);
 
-        const MaruttoPVKeiri = () => {
-            const [documents, setDocuments] = React.useState([]);
-            const [customers, setCustomers] = React.useState([]);
-            const [showCustomerDB, setShowCustomerDB] = React.useState(false);
-            const [showPreview, setShowPreview] = React.useState(false);
-            const [currentDoc, setCurrentDoc] = React.useState({
-                id: null,
-                type: 'proposal',
-                title: '',
-                client: '',
-                clientId: null,
-                projectInfo: {
-                    location: '',
-                    installationType: 'SG',
-                    installContent: '資材工事',
-                    panelCount: 0,
-                    panelWattPerUnit: 400,
-                    inverterCount: 0,
-                    inverterCapacityPerUnit: 50,
-                    dcCapacity: 0,
-                    acCapacity: 0
-                },
-                items: [
-                    { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-                    { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-                    { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-                    { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
-                    { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
-                    { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
-                ],
-                notes: '',
-                createdAt: new Date().toISOString().split('T')[0],
-                status: 'draft'
-            });
-            const [showList, setShowList] = React.useState(false);
-            const [showPriceTable, setShowPriceTable] = React.useState(false);
-            const [emailModal, setEmailModal] = React.useState({ show: false, type: '' });
-            const [customerModal, setCustomerModal] = React.useState({ show: false, customer: null });
+  const calculateTotal = (useEstimatePrice = false) => {
+    return currentDoc.items.reduce((sum, item) => {
+      const price = useEstimatePrice ? item.estimatePrice : item.unitPrice;
+      return sum + (item.quantity * price);
+    }, 0);
+  };
 
-            // 備考テンプレート
-            const noteTemplates = [
-                { 
-                    name: '標準テンプレート', 
-                    content: '【工期】約3ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時30%、中間時40%、完成時30%\n【その他】系統連系申請費用を含む' 
-                },
-                { 
-                    name: '短納期テンプレート', 
-                    content: '【工期】約2ヶ月（短納期対応）\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【お支払い条件】契約時50%、完成時50%\n【注意事項】短納期のため、天候により工期が延長する場合があります' 
-                },
-                { 
-                    name: '営農型テンプレート', 
-                    content: '【工期】約4ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証\n【農地一時転用】申請支援を含む\n【遮光率】30%以下で設計\n【支柱高さ】最低地上高3m確保' 
-                },
-                {
-                    name: '屋根設置テンプレート',
-                    content: '【工期】約1.5ヶ月\n【保証期間】太陽光パネル：25年出力保証、パワコン：10年保証、防水工事：10年保証\n【屋根診断】設置前に無料診断実施\n【注意事項】屋根の状態により補強工事が必要な場合があります'
-                }
-            ];
+  const calculateMargin = () => {
+    const cost = calculateTotal(false);
+    const estimate = calculateTotal(true);
+    return estimate - cost;
+  };
 
-            // 設置タイプの説明
-            const installationTypes = {
-                SG: { name: '野立て', description: '地面に直接設置する標準的な太陽光発電システム' },
-                SR: { name: '屋根設置', description: '建物の屋根に設置する省スペース型システム' },
-                SC: { name: 'カーポート型', description: '駐車場の屋根として機能する太陽光発電システム' },
-                SS: { name: '営農型', description: '農業と太陽光発電を両立させるソーラーシェアリング' },
-                SV: { name: '垂直型', description: '垂直に設置し両面発電が可能な次世代型システム' },
-                SH: { name: 'ハウス型', description: '農業用ハウスに設置する特殊型システム' },
-                ST: { name: '追尾型', description: '太陽の動きを追尾して発電効率を最大化するシステム' }
-            };
+  const calculateMarginRate = () => {
+    const cost = calculateTotal(false);
+    const margin = calculateMargin();
+    return cost > 0 ? (margin / cost * 100).toFixed(1) : 0;
+  };
 
-            // 設置内容の選択肢
-            const installContentOptions = ['一式', '資材', '工事', '資材工事', '申請', 'その他'];
+  const addItem = () => {
+    setCurrentDoc({
+      ...currentDoc,
+      items: [...currentDoc.items, { category: 'その他', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }]
+    });
+  };
 
-            // 資材価格表
-            const priceTable = {
-                panels: [
-                    { name: '400W単結晶パネル（標準）', price: 24000, description: '標準的な高効率パネル' },
-                    { name: '450W単結晶パネル（高効率）', price: 28000, description: '最新の高効率パネル' },
-                    { name: '両面発電パネル（営農型用）', price: 32000, description: '営農型に最適な両面発電' }
-                ],
-                inverters: [
-                    { name: '50kWパワコン（標準）', price: 780000, description: '標準的な50kWパワコン' },
-                    { name: '100kWパワコン（大型）', price: 1400000, description: '大規模発電所向け' },
-                    { name: '25kWパワコン（小型）', price: 450000, description: '小規模設備向け' }
-                ],
-                mountings: [
-                    { name: '野立て架台（標準）', price: 12000, description: '標準的な野立て用架台/枚' },
-                    { name: '屋根用架台', price: 8500, description: '屋根設置用軽量架台/枚' },
-                    { name: 'カーポート架台', price: 25000, description: 'カーポート型架台/枚' },
-                    { name: '営農型架台（高架）', price: 35000, description: '営農型用高架架台/枚' },
-                    { name: '追尾架台', price: 45000, description: '1軸追尾システム付き架台/枚' }
-                ]
-            };
+  const updateItem = (index, field, value) => {
+    const newItems = [...currentDoc.items];
+    if (field === 'quantity' || field === 'unitPrice' || field === 'estimatePrice') {
+      newItems[index][field] = Number(value);
+    } else {
+      newItems[index][field] = value;
+    }
+    setCurrentDoc({ ...currentDoc, items: newItems });
+  };
 
-            // ここから全ての関数と残りのコンポーネントを続けて記述...
-            // （文字数制限のため省略しますが、実際は先ほどの全コードをここに貼り付けます）
+  const removeItem = (index) => {
+    if (currentDoc.items.length > 1) {
+      const newItems = currentDoc.items.filter((_, i) => i !== index);
+      setCurrentDoc({ ...currentDoc, items: newItems });
+    }
+  };
 
-            // DC/AC容量の自動計算
-            React.useEffect(() => {
-                const dcCapacity = (currentDoc.projectInfo.panelCount * currentDoc.projectInfo.panelWattPerUnit) / 1000;
-                const acCapacity = currentDoc.projectInfo.inverterCount * currentDoc.projectInfo.inverterCapacityPerUnit;
-                
-                setCurrentDoc(prev => ({
-                    ...prev,
-                    projectInfo: {
-                        ...prev.projectInfo,
-                        dcCapacity: dcCapacity,
-                        acCapacity: acCapacity
-                    }
-                }));
-            }, [currentDoc.projectInfo.panelCount, currentDoc.projectInfo.panelWattPerUnit, 
-                currentDoc.projectInfo.inverterCount, currentDoc.projectInfo.inverterCapacityPerUnit]);
+  const updateProjectInfo = (field, value) => {
+    setCurrentDoc({
+      ...currentDoc,
+      projectInfo: { ...currentDoc.projectInfo, [field]: value }
+    });
+  };
 
-            const formatCurrency = (amount) => {
-                return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
-            };
+  const addFromPriceTable = (category, item) => {
+    const newItem = {
+      category: category === 'panels' ? '太陽光パネル' : category === 'inverters' ? 'パワコン' : '架台',
+      description: item.name,
+      quantity: 1,
+      unitPrice: item.price,
+      estimatePrice: Math.round(item.price * 1.15)
+    };
+    setCurrentDoc({
+      ...currentDoc,
+      items: [...currentDoc.items, newItem]
+    });
+    alert(`${item.name}を追加しました`);
+  };
 
-            // 簡略化のため、主要な機能のみ実装したデモ版を表示
-            return (
-                <div className="min-h-screen bg-gray-50">
-                    <header className="bg-green-600 text-white p-4 shadow-lg">
-                        <div className="max-w-7xl mx-auto flex items-center justify-between">
-                            <div className="flex items-center space-x-3">
-                                <Icon name="sun" className="w-8 h-8" />
-                                <h1 className="text-2xl font-bold">まるっとPV経理</h1>
-                            </div>
-                        </div>
-                    </header>
-                    <div className="max-w-7xl mx-auto p-6">
-                        <div className="bg-white rounded-lg shadow p-6">
-                            <h2 className="text-xl font-bold mb-4">システム起動成功！</h2>
-                            <p>GitHubPages版「まるっとPV経理」が正常に起動しました。</p>
-                            <p className="mt-2 text-gray-600">
-                                完全版のコードは文字数制限のため省略していますが、
-                                先ほどのApp.jsの内容をここに貼り付けることで全機能が利用可能になります。
-                            </p>
-                        </div>
-                    </div>
-                </div>
-            );
-        };
+  // AI推測機能
+  const suggestEstimate = () => {
+    const dcCapacity = currentDoc.projectInfo.dcCapacity;
+    if (!dcCapacity || !currentDoc.projectInfo.location) {
+      alert('DC容量と設置場所を入力してください');
+      return;
+    }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<MaruttoPVKeiri />);
-    </script>
-</body>
-</html>
+    const panelWatt = currentDoc.projectInfo.panelWattPerUnit || 400;
+    const inverterCapacity = currentDoc.projectInfo.inverterCapacityPerUnit || 50;
+    
+    const panelCount = Math.ceil((dcCapacity * 1000) / panelWatt);
+    const inverterCount = Math.ceil(dcCapacity / inverterCapacity);
+    
+    // 設置タイプに応じた価格調整
+    const typeMultiplier = {
+      SG: 1.0,
+      SR: 0.9,
+      SC: 1.3,
+      SS: 1.5,
+      SV: 1.4,
+      SH: 1.2,
+      ST: 1.8
+    };
+    
+    const multiplier = typeMultiplier[currentDoc.projectInfo.installationType] || 1.0;
+    
+    const suggestion = {
+      panelCount,
+      inverterCount,
+      items: [
+        { 
+          category: '設計費', 
+          description: '基本設計・詳細設計・申請業務', 
+          quantity: 1, 
+          unitPrice: Math.round(dcCapacity * 5000 * multiplier),
+          estimatePrice: Math.round(dcCapacity * 5000 * multiplier * 1.2)
+        },
+        { 
+          category: '太陽光パネル', 
+          description: `${panelWatt}W単結晶パネル`, 
+          quantity: panelCount, 
+          unitPrice: 24000,
+          estimatePrice: 26000
+        },
+        { 
+          category: 'パワコン', 
+          description: `${inverterCapacity}kWパワーコンディショナー`, 
+          quantity: inverterCount, 
+          unitPrice: 780000,
+          estimatePrice: 850000
+        },
+        { 
+          category: '架台', 
+          description: installationTypes[currentDoc.projectInfo.installationType].name + '架台', 
+          quantity: panelCount, 
+          unitPrice: Math.round(12000 * multiplier),
+          estimatePrice: Math.round(13000 * multiplier)
+        },
+        { 
+          category: '電気工事', 
+          description: dcCapacity > 500 ? '高圧受電設備・配線工事' : '配線・系統連系工事', 
+          quantity: 1, 
+          unitPrice: Math.round(dcCapacity * 15000 * multiplier),
+          estimatePrice: Math.round(dcCapacity * 18000 * multiplier)
+        },
+        { 
+          category: '基礎工事', 
+          description: currentDoc.projectInfo.installationType === 'SR' ? '屋根補強工事' : '造成・杭打ち工事', 
+          quantity: 1, 
+          unitPrice: Math.round(dcCapacity * 8000 * multiplier),
+          estimatePrice: Math.round(dcCapacity * 9600 * multiplier)
+        }
+      ]
+    };
+    
+    if (window.confirm('AI推測結果を反映しますか？\n\n' +
+      `推定パネル数: ${panelCount}枚\n` +
+      `推定パワコン数: ${inverterCount}台\n` +
+      `推定原価: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.unitPrice, 0).toLocaleString()}\n` +
+      `推定見積額: ¥${suggestion.items.reduce((sum, item) => sum + item.quantity * item.estimatePrice, 0).toLocaleString()}`)) {
+      setCurrentDoc({
+        ...currentDoc,
+        projectInfo: {
+          ...currentDoc.projectInfo,
+          panelCount,
+          inverterCount
+        },
+        items: suggestion.items
+      });
+    }
+  };
+
+  const saveDocument = () => {
+    const newDoc = {
+      ...currentDoc,
+      id: currentDoc.id || Date.now(),
+      createdAt: currentDoc.id ? currentDoc.createdAt : new Date().toISOString().split('T')[0]
+    };
+    
+    if (currentDoc.id) {
+      setDocuments(documents.map(d => d.id === currentDoc.id ? newDoc : d));
+    } else {
+      setDocuments([...documents, newDoc]);
+    }
+    
+    alert('保存しました');
+  };
+
+  const convertDocument = (newType) => {
+    if (currentDoc.type === 'proposal' && newType === 'estimate') {
+      const updatedItems = currentDoc.items.map(item => ({
+        ...item,
+        estimatePrice: item.estimatePrice || Math.round(item.unitPrice * 1.15)
+      }));
+      setCurrentDoc({ ...currentDoc, type: newType, items: updatedItems });
+    } else {
+      setCurrentDoc({ ...currentDoc, type: newType });
+    }
+    alert(`${getDocTypeName(newType)}に変換しました`);
+  };
+
+  const getDocTypeName = (type) => {
+    const names = {
+      proposal: '起案書',
+      estimate: '見積書',
+      invoice: '請求書',
+      order: '注文書'
+    };
+    return names[type] || type;
+  };
+
+  const loadDocument = (doc) => {
+    setCurrentDoc(doc);
+    setShowList(false);
+  };
+
+  const newDocument = () => {
+    setCurrentDoc({
+      id: null,
+      type: 'proposal',
+      title: '',
+      client: '',
+      clientId: null,
+      projectInfo: {
+        location: '',
+        installationType: 'SG',
+        installContent: '資材工事',
+        panelCount: 0,
+        panelWattPerUnit: 400,
+        inverterCount: 0,
+        inverterCapacityPerUnit: 50,
+        dcCapacity: 0,
+        acCapacity: 0
+      },
+      items: [
+        { category: '設計費', description: '基本設計・詳細設計', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+        { category: '太陽光パネル', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+        { category: 'パワコン', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+        { category: '架台', description: '', quantity: 0, unitPrice: 0, estimatePrice: 0 },
+        { category: '電気工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 },
+        { category: '基礎工事', description: '', quantity: 1, unitPrice: 0, estimatePrice: 0 }
+      ],
+      notes: '',
+      createdAt: new Date().toISOString().split('T')[0],
+      status: 'draft'
+    });
+    setShowList(false);
+    setShowPriceTable(false);
+  };
+
+  const selectCustomer = (customer) => {
+    setCurrentDoc({
+      ...currentDoc,
+      client: customer.name,
+      clientId: customer.id
+    });
+    alert(`顧客「${customer.name}」を選択しました`);
+  };
+
+  const sendEmail = () => {
+    if (currentDoc.type === 'proposal') {
+      alert('起案書はメール送信できません。見積書、請求書、注文書に変換してから送信してください。');
+      setEmailModal({ show: false, type: '' });
+      return;
+    }
+    
+    const customer = customers.find(c => c.id === currentDoc.clientId);
+    const email = customer ? customer.email : '未登録';
+    
+    alert(`${getDocTypeName(emailModal.type)}をメールで送信しました\n送信先: ${currentDoc.client}\nメールアドレス: ${email}`);
+    setEmailModal({ show: false, type: '' });
+  };
+
+  const downloadPDF = () => {
+    alert(`${getDocTypeName(currentDoc.type)}をPDFでダウンロードしました\nファイル名: ${currentDoc.title}_${getDocTypeName(currentDoc.type)}.pdf`);
+  };
+
+  const applyNoteTemplate = (template) => {
+    setCurrentDoc({
+      ...currentDoc,
+      notes: template.content
+    });
+  };
+
+  const saveCustomer = (customer) => {
+    if (customer.id) {
+      setCustomers(customers.map(c => c.id === customer.id ? customer : c));
+    } else {
+      setCustomers([...customers, { ...customer, id: Date.now() }]);
+    }
+    setCustomerModal({ show: false, customer: null });
+    alert('顧客情報を保存しました');
+  };
+
+  const deleteCustomer = (id) => {
+    if (window.confirm('この顧客を削除しますか？')) {
+      setCustomers(customers.filter(c => c.id !== id));
+    }
+  };
+
+  const formatCurrency = (amount) => {
+    return new Intl.NumberFormat('ja-JP', { style: 'currency', currency: 'JPY' }).format(amount);
+  };
+
+  return (
+    <div className="min-h-screen bg-gray-50">
+      {/* ヘッダー */}
+      <header className="bg-green-600 text-white p-4 shadow-lg">
+        <div className="max-w-7xl mx-auto flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Sun className="w-8 h-8" />
+            <h1 className="text-2xl font-bold">まるっとPV経理</h1>
+          </div>
+          <div className="flex items-center space-x-4">
+            <button
+              onClick={() => setShowCustomerDB(!showCustomerDB)}
+              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+            >
+              <Users className="w-5 h-5" />
+              <span>顧客DB</span>
+            </button>
+            <button
+              onClick={() => setShowPriceTable(!showPriceTable)}
+              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+            >
+              <Package className="w-5 h-5" />
+              <span>価格表</span>
+            </button>
+            <button
+              onClick={() => setShowList(!showList)}
+              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+            >
+              <List className="w-5 h-5" />
+              <span>書類一覧</span>
+            </button>
+            <button
+              onClick={newDocument}
+              className="flex items-center space-x-2 bg-green-700 hover:bg-green-800 px-4 py-2 rounded"
+            >
+              <Plus className="w-5 h-5" />
+              <span>新規作成</span>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto p-6">
+        {showCustomerDB ? (
+          /* 顧客データベース */
+          <div className="bg-white rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-bold">顧客データベース</h2>
+              <button
+                onClick={() => setCustomerModal({ show: true, customer: null })}
+                className="flex items-center space-x-2 bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700"
+              >
+                <Plus className="w-5 h-5" />
+                <span>新規顧客登録</span>
+              </button>
+            </div>
+            <div className="overflow-x-auto">
+              <table className="w-full">
+                <thead className="bg-gray-100">
+                  <tr>
+                    <th className="px-4 py-2 text-left">顧客名</th>
+                    <th className="px-4 py-2 text-left">メールアドレス</th>
+                    <th className="px-4 py-2 text-left">電話番号</th>
+                    <th className="px-4 py-2 text-left">担当者</th>
+                    <th className="px-4 py-2 text-center">操作</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {customers.map((customer) => (
+                    <tr key={customer.id} className="border-b hover:bg-gray-50">
+                      <td className="px-4 py-2">{customer.name}</td>
+                      <td className="px-4 py-2">{customer.email}</td>
+                      <td className="px-4 py-2">{customer.phone}</td>
+                      <td className="px-4 py-2">{customer.contactPerson}</td>
+                      <td className="px-4 py-2 text-center">
+                        <button
+                          onClick={() => selectCustomer(customer)}
+                          className="text-green-600 hover:text-green-800 mr-2"
+                        >
+                          選択
+                        </button>
+                        <button
+                          onClick={() => setCustomerModal({ show: true, customer })}
+                          className="text-blue-600 hover:text-blue-800 mr-2"
+                        >
+                          <Edit className="w-4 h-4 inline" />
+                        </button>
+                        <button
+                          onClick={() => deleteCustomer(customer.id)}
+                          className="text-red-600 hover:text-red-800"
+                        >
+                          <Trash2 className="w-4 h-4 inline" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        ) : showPriceTable ? (
+          /* 価格表 */
+          <div className="bg-white rounded-lg shadow p-6">
+            <h2 className="text-xl font-bold mb-4">資材価格表</h2>
+            
+            <div className="mb-6">
+              <h3 className="font-bold mb-2">太陽光パネル</h3>
+              <div className="grid grid-cols-1 md:gri
